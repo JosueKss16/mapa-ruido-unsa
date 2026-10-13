@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mapa de contaminación sonora — Campus Ingenierías UNSA</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  :root { color-scheme: light; --ink:#17202a; --muted:#596579; --panel:#ffffff; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui,-apple-system,Segoe UI,Roboto,sans-serif; color:var(--ink); background:#f2f5f8; }
+  header { padding:16px 18px 12px; background:#fff; border-bottom:1px solid #dbe2ea; }
+  h1 { font-size:clamp(1.15rem,2.8vw,1.7rem); margin:0 0 5px; }
+  .sub { color:var(--muted); font-size:.92rem; }
+  .layout { display:grid; grid-template-columns:minmax(0,1fr) 300px; gap:12px; padding:12px; }
+  #map { height:calc(100vh - 150px); min-height:470px; border-radius:12px; border:1px solid #d5dde6; overflow:hidden; }
+  aside { background:var(--panel); border:1px solid #dbe2ea; border-radius:12px; padding:14px; align-self:start; }
+  aside h2 { font-size:1rem; margin:0 0 10px; }
+  .legend { display:grid; gap:7px; margin-bottom:14px; font-size:.9rem; }
+  .gradient { height:13px; border-radius:999px; margin:8px 0 4px; background:linear-gradient(90deg,#c5ccd5 0%,#45c95e 25%,#e8f000 50%,#ff8c00 75%,#f00018 100%); border:1px solid #cbd2da; }
+  .gradient-labels { display:flex; justify-content:space-between; color:var(--muted); font-size:.72rem; margin-bottom:14px; }
+  .stats { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:12px 0 16px; }
+  .stat { border:1px solid #e0e6ed; border-radius:9px; padding:9px; background:#fbfcfd; }
+  .stat strong { display:block; font-size:1.15rem; }
+  .stat span { font-size:.75rem; color:var(--muted); }
+  .filters { display:grid; gap:6px; margin:10px 0 14px; }
+  .filters label { font-size:.83rem; font-weight:600; }
+  select { width:100%; border:1px solid #ccd5df; border-radius:8px; padding:9px; background:#fff; font:inherit; }
+  .notice { font-size:.78rem; color:var(--muted); line-height:1.4; margin:8px 0; }
+  .leaflet-tooltip.sector-label { background:rgba(255,255,255,.9); border:1px solid #7c8795; border-radius:5px; box-shadow:none; font-weight:700; font-size:11px; padding:2px 5px; }
+  .dot { display:inline-block; width:12px; height:12px; border-radius:50%; margin-right:7px; vertical-align:-1px; border:1px solid #9aa5b1; }
+  #status { font-size:.85rem; color:var(--muted); padding:9px 10px; border-radius:8px; background:#f4f7fa; margin-bottom:12px; }
+  #list { display:grid; gap:7px; }
+  .sector { display:grid; grid-template-columns:12px 1fr auto; align-items:center; gap:8px; border-bottom:1px solid #edf0f4; padding:6px 0; font-size:.88rem; }
+  .sector .level { color:var(--muted); text-align:right; font-size:.8rem; }
+  .small { color:var(--muted); font-size:.8rem; line-height:1.45; margin-top:13px; }
+  .leaflet-popup-content { line-height:1.55; }
+  @media (max-width:850px) { .layout { grid-template-columns:1fr; } #map { height:65vh; min-height:400px; } aside { order:2; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Mapa de contaminación sonora — Campus Ingenierías UNSA</h1>
+  <div class="sub">Mapa de percepción de ruido por sector · actualización automática cada 15 segundos.</div>
+</header>
+<div class="layout">
+  <div id="map" aria-label="Mapa interactivo de sectores"></div>
+  <aside>
+    <h2>Nivel reportado</h2>
+    <div class="gradient" title="Escala gradual de color"></div>
+    <div class="gradient-labels"><span>Sin datos</span><span>Bajo</span><span>Moderado</span><span>Alto</span></div>
+    <div class="filters">
+      <label for="horario">Filtrar por horario</label>
+      <select id="horario">
+        <option value="Todos">Todos los horarios</option>
+        <option value="Mañana (07:00 - 13:00)">Mañana (07:00–13:00)</option>
+        <option value="Tarde (13:00 - 18:00)">Tarde (13:00–18:00)</option>
+        <option value="Noche (18:00 - 22:00)">Noche (18:00–22:00)</option>
+        <option value="Tiempo completo / Variado">Tiempo completo / Variado</option>
+      </select>
+      <div class="notice">El filtro por horario requiere que Apps Script publique un resumen específico por franja. Si la fuente solo entrega el resumen general, se indicará aquí.</div>
+    </div>
+    <div class="stats">
+      <div class="stat"><strong id="totalResponses">—</strong><span>Respuestas válidas</span></div>
+      <div class="stat"><strong id="overallAvg">—</strong><span>Promedio general</span></div>
+      <div class="stat"><strong id="noisySector">—</strong><span>Mayor promedio</span></div>
+      <div class="stat"><strong id="sectorsWithData">—</strong><span>Sectores con datos</span></div>
+    </div>
+    <div id="status">Cargando datos del resumen…</div>
+    <div id="list"></div>
+    <p class="small">El color combina el promedio de ruido percibido (tono) y la cantidad de respuestas (intensidad). Los resultados con pocas respuestas se muestran atenuados. Es percepción declarada, no una medición en decibelios.</p>
+  </aside>
+</div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const sectors = [{"name": "Sector 1", "coords": [[-16.40594741464837, -71.52454357734723], [-16.40643903532019, -71.52511795918727], [-16.4069659909877, -71.52462814071792], [-16.40673688824033, -71.52386885509009], [-16.40594741464837, -71.52454357734723]]}, {"name": "Sector 2", "coords": [[-16.40382398204928, -71.52591474208336], [-16.40348659616114, -71.52622808957109], [-16.40368271148853, -71.52645714632217], [-16.40383475207471, -71.52665442293802], [-16.40442715867136, -71.52610239005867], [-16.40409757106154, -71.52565899552991], [-16.40382398204928, -71.52591474208336]]}, {"name": "Sector 3", "coords": [[-16.40412379896531, -71.5243714169698], [-16.40374056712134, -71.52385529756776], [-16.40314370017662, -71.52436990524019], [-16.40318942597364, -71.52530625708889], [-16.40337608695615, -71.5253091033246], [-16.40364620192014, -71.52486122566826], [-16.40412379896531, -71.5243714169698]]}, {"name": "Sector 4", "coords": [[-16.40435671200764, -71.5272874288314], [-16.40490250804606, -71.52670515511959], [-16.40442756014734, -71.5261194490036], [-16.40384381918185, -71.52668362237725], [-16.40435671200764, -71.5272874288314]]}, {"name": "Sector 5", "coords": [[-16.40443828023654, -71.52487655994008], [-16.40414557168516, -71.5245155562186], [-16.40355168140333, -71.5250794807201], [-16.40381118239431, -71.52545596651255], [-16.40443828023654, -71.52487655994008]]}, {"name": "Sector 6", "coords": [[-16.40568745499479, -71.52234234967797], [-16.40515758622741, -71.52278294686008], [-16.40469880660299, -71.52341656078778], [-16.40524041775957, -71.52407531601546], [-16.40625912271318, -71.52315578833341], [-16.40568745499479, -71.52234234967797]]}, {"name": "Sector 7", "coords": [[-16.40419571966746, -71.52453098226333], [-16.40444648306689, -71.5248385200082], [-16.40484039919566, -71.52448032389458], [-16.40456204998949, -71.52419036699351], [-16.40419571966746, -71.52453098226333]]}, {"name": "Sector 8", "coords": [[-16.40571220280075, -71.52463869563397], [-16.40642446557276, -71.52396474728938], [-16.4060100952958, -71.52346224150878], [-16.40532161529597, -71.52410696492744], [-16.40571220280075, -71.52463869563397]]}, {"name": "Sector 9", "coords": [[-16.40241620189173, -71.5249387858715], [-16.40363022170559, -71.52386976184441], [-16.40328361470142, -71.52341113863045], [-16.40202874177385, -71.52448289887019], [-16.40241620189173, -71.5249387858715]]}, {"name": "Sector 10", "coords": [[-16.40418721656236, -71.52393234100857], [-16.40478898325819, -71.52296540575415], [-16.40515528681442, -71.52251923622671], [-16.40561822922728, -71.52218774502995], [-16.40529750301027, -71.52167341313506], [-16.40362494177661, -71.52324654003168], [-16.40418721656236, -71.52393234100857]]}, {"name": "Sector 11", "coords": [[-16.40519989422836, -71.52552474888752], [-16.4050351160697, -71.52527826968921], [-16.40434087422901, -71.5258694200502], [-16.40453021817076, -71.52611289767385], [-16.40519989422836, -71.52552474888752]]}];
+const endpoint = "https://script.google.com/macros/s/AKfycbxCu0SE8jE7TkAScvWFuQq6i8jVFKiOS2Q9NUcqoo74tBbfGlVkZSEz4O_7-vSsGtmR/exec";
+const colorMap = { "SIN_COLOR": "#d7dde4" };
+const lowRGB = [0,190,55], midRGB = [255,235,0], highRGB = [245,0,20], noDataRGB = [195,203,213];
+function mix(a,b,t) { return a.map((v,i)=>Math.round(v+(b[i]-v)*Math.max(0,Math.min(1,t)))); }
+function rgb(rgb) { return "#" + rgb.map(v=>v.toString(16).padStart(2,"0")).join(""); }
+function scoreColor(avg, count) {
+  if (!Number.isFinite(avg) || count <= 0) return "#d7dde4";
+  // La escala 1–5 se interpola de verde (1) a amarillo (3) y rojo (5).
+  const raw = Math.max(1, Math.min(5, avg));
+  const tone = raw <= 3 ? mix(lowRGB, midRGB, (raw-1)/2) : mix(midRGB, highRGB, (raw-3)/2);
+  // La intensidad depende explícitamente del tamaño de muestra:
+  // 1–4 respuestas = tenue; 5–19 = intermedia; 20+ = color pleno.
+  let confidence;
+  if (count < 5) confidence = 0.24 + 0.04 * (count - 1); // 1: 24%, 4: 36%
+  else if (count < 20) confidence = 0.45 + 0.035 * (count - 5); // 5: 45%, 19: 94%
+  else confidence = 1;
+  return rgb(mix(noDataRGB, tone, confidence));
+}
+function getAvg(row) {
+  const v = parseFloat(String(row?.["Promedio de ruido percibido"] ?? "").replace(",", "."));
+  return Number.isFinite(v) ? v : NaN;
+}
+function getCount(row) {
+  const n = parseInt(row?.["Respuestas válidas"] ?? "0", 10);
+  return Number.isFinite(n) ? n : 0;
+}
+const map = L.map('map', { zoomControl:true });
+L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+  attribution: 'Imagery © Esri', maxZoom: 19
+}).addTo(map);
+const borders = L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+  attribution: 'Labels © Esri', maxZoom: 19, opacity: 0.9
+}).addTo(map);
+const layers = {};
+function cleanNum(value) {
+  if (value === null || value === undefined || String(value).trim() === '') return '—';
+  return String(value);
+}
+function popupHtml(name, data) {
+  const count = getCount(data || {});
+  const avg = getAvg(data || {});
+  const level = (data && data['Nivel']) || 'Sin datos';
+  const color = scoreColor(avg, count);
+  return '<strong>' + name + '</strong><br>Nivel: ' + level +
+    '<br>Promedio percibido: ' + (Number.isFinite(avg) ? avg.toFixed(2) : '—') +
+    '<br>Respuestas válidas: ' + count +
+    '<br><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:'+color+';border:1px solid #888"></span> Color gradual según promedio y cantidad de respuestas';
+}
+sectors.forEach(s => {
+  const layer = L.polygon(s.coords, {
+    color: '#ffffff', weight: 2.5, opacity: 1,
+    fillColor: colorMap.SIN_COLOR, fillOpacity: .62
+  }).addTo(map);
+  layer.bindPopup('<strong>' + s.name + '</strong><br>Esperando datos…');
+  layer.bindTooltip(s.name, { permanent:true, direction:'center', className:'sector-label' });
+  layers[s.name] = layer;
+});
+const allBounds = L.featureGroup(Object.values(layers)).getBounds();
+map.fitBounds(allBounds.pad(0.12));
+function colorFor(row) {
+  return scoreColor(getAvg(row || {}), getCount(row || {}));
+}
+let latestRows = [];
+function renderSummary(rows) {
+  const horario = document.getElementById('horario').value;
+  let chosen = rows;
+  if (horario !== 'Todos') {
+    const hasHourly = rows.some(r => Object.prototype.hasOwnProperty.call(r, 'Horario') ||
+      Object.prototype.hasOwnProperty.call(r, 'horario') ||
+      Object.prototype.hasOwnProperty.call(r, 'ResúmenesPorHorario'));
+    if (!hasHourly) {
+      document.getElementById('status').textContent =
+        'La fuente actual solo entrega el resumen general; para filtrar por horario hay que añadir ese desglose en Apps Script.';
+      chosen = rows;
+    } else {
+      chosen = rows.filter(r => (r['Horario'] || r['horario']) === horario);
+    }
+  }
+  const byName = {};
+  chosen.forEach(row => { if (row && row['Sector']) byName[String(row['Sector']).trim()] = row; });
+  sectors.forEach(s => {
+    const d = byName[s.name] || {};
+    const layer = layers[s.name];
+    const avg = getAvg(d), count = getCount(d);
+    let fillOpacity = 0.42;
+    if (count > 0 && count < 5) fillOpacity = 0.38;
+    else if (count >= 5 && count < 20) fillOpacity = 0.50 + 0.22 * ((count - 5) / 15);
+    else if (count >= 20) fillOpacity = 0.82;
+    layer.setStyle({ fillColor: scoreColor(avg, count), fillOpacity, color:'#ffffff', weight:2 });
+    layer.setPopupContent(popupHtml(s.name, d));
+  });
+  const list = document.getElementById('list');
+  list.innerHTML = '';
+  sectors.forEach(s => {
+    const d = byName[s.name] || {};
+    const div = document.createElement('div'); div.className = 'sector';
+    const dot = document.createElement('span'); dot.className = 'dot'; dot.style.background = colorFor(d);
+    const title = document.createElement('span'); title.textContent = s.name;
+    const level = document.createElement('span'); level.className = 'level';
+    const avg = getAvg(d), count = getCount(d);
+    level.textContent = count ? `${Number.isFinite(avg) ? avg.toFixed(1) : '—'} · n=${count}` : 'Sin datos';
+    div.append(dot,title,level); list.appendChild(div);
+  });
+  const validRows = Object.values(byName).filter(r => getCount(r)>0 && Number.isFinite(getAvg(r)));
+  const total = validRows.reduce((sum,r)=>sum+getCount(r),0);
+  const avgAll = total ? validRows.reduce((sum,r)=>sum+getAvg(r)*getCount(r),0)/total : NaN;
+  const max = validRows.slice().sort((a,b)=>getAvg(b)-getAvg(a))[0];
+  document.getElementById('totalResponses').textContent = String(total);
+  document.getElementById('overallAvg').textContent = Number.isFinite(avgAll) ? avgAll.toFixed(2)+'/5' : '—';
+  document.getElementById('noisySector').textContent = max ? max['Sector'] : '—';
+  document.getElementById('sectorsWithData').textContent = `${validRows.length}/11`;
+}
+document.getElementById('horario').addEventListener('change', () => renderSummary(latestRows));
+async function refresh() {
+  const status = document.getElementById('status');
+  try {
+    const response = await fetch(endpoint + (endpoint.includes('?') ? '&' : '?') + 't=' + Date.now(), {cache:'no-store'});
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    const rows = await response.json();
+    if (!Array.isArray(rows)) throw new Error('El endpoint no devolvió una lista JSON');
+    latestRows = rows;
+    renderSummary(latestRows);
+    status.textContent = 'Datos actualizados: ' + new Date().toLocaleTimeString() + ' · consulta cada 15 s';
+  } catch (e) {
+    status.textContent = 'No se pudieron cargar los datos: ' + e.message + '. Revisa conexión y permisos del endpoint.';
+    console.error(e);
+  }
+}
+refresh();
+setInterval(refresh, 15000);
+</script>
+</body>
+</html>
