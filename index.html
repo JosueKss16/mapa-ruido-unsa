@@ -53,12 +53,12 @@
       <label for="horario">Filtrar por horario</label>
       <select id="horario">
         <option value="Todos">Todos los horarios</option>
-        <option value="Mañana (07:00 - 13:00)">Mañana (07:00–13:00)</option>
-        <option value="Tarde (13:00 - 18:00)">Tarde (13:00–18:00)</option>
-        <option value="Noche (18:00 - 22:00)">Noche (18:00–22:00)</option>
-        <option value="Tiempo completo / Variado">Tiempo completo / Variado</option>
+        <option value="Manana">Mañana (07:00–13:00)</option>
+        <option value="Tarde">Tarde (13:00–18:00)</option>
+        <option value="Noche">Noche (18:00–22:00)</option>
+        <option value="Variado">Tiempo completo / Variado</option>
       </select>
-      <div class="notice">El filtro por horario requiere que Apps Script publique un resumen específico por franja. Si la fuente solo entrega el resumen general, se indicará aquí.</div>
+      <div class="notice">Elige un horario para recalcular los promedios y colores con las respuestas de esa franja.</div>
     </div>
     <div class="stats">
       <div class="stat"><strong id="totalResponses">—</strong><span>Respuestas válidas</span></div>
@@ -138,22 +138,8 @@ function colorFor(row) {
 }
 let latestRows = [];
 function renderSummary(rows) {
-  const horario = document.getElementById('horario').value;
-  let chosen = rows;
-  if (horario !== 'Todos') {
-    const hasHourly = rows.some(r => Object.prototype.hasOwnProperty.call(r, 'Horario') ||
-      Object.prototype.hasOwnProperty.call(r, 'horario') ||
-      Object.prototype.hasOwnProperty.call(r, 'ResúmenesPorHorario'));
-    if (!hasHourly) {
-      document.getElementById('status').textContent =
-        'La fuente actual solo entrega el resumen general; para filtrar por horario hay que añadir ese desglose en Apps Script.';
-      chosen = rows;
-    } else {
-      chosen = rows.filter(r => (r['Horario'] || r['horario']) === horario);
-    }
-  }
   const byName = {};
-  chosen.forEach(row => { if (row && row['Sector']) byName[String(row['Sector']).trim()] = row; });
+  rows.forEach(row => { if (row && row['Sector']) byName[String(row['Sector']).trim()] = row; });
   sectors.forEach(s => {
     const d = byName[s.name] || {};
     const layer = layers[s.name];
@@ -186,24 +172,35 @@ function renderSummary(rows) {
   document.getElementById('noisySector').textContent = max ? max['Sector'] : '—';
   document.getElementById('sectorsWithData').textContent = `${validRows.length}/11`;
 }
-document.getElementById('horario').addEventListener('change', () => renderSummary(latestRows));
+let refreshInProgress = false;
 async function refresh() {
+  if (refreshInProgress) return;
+  refreshInProgress = true;
   const status = document.getElementById('status');
+  const horario = document.getElementById('horario').value;
   try {
-    const response = await fetch(endpoint + (endpoint.includes('?') ? '&' : '?') + 't=' + Date.now(), {cache:'no-store'});
+    const url = new URL(endpoint);
+    if (horario !== 'Todos') url.searchParams.set('horario', horario);
+    url.searchParams.set('t', Date.now());
+    status.textContent = 'Cargando datos' + (horario === 'Todos' ? ' generales…' : ' para el horario seleccionado…');
+    const response = await fetch(url.toString(), {cache:'no-store'});
     if (!response.ok) throw new Error('HTTP ' + response.status);
     const rows = await response.json();
     if (!Array.isArray(rows)) throw new Error('El endpoint no devolvió una lista JSON');
     latestRows = rows;
     renderSummary(latestRows);
-    status.textContent = 'Datos actualizados: ' + new Date().toLocaleTimeString() + ' · consulta cada 15 s';
+    const total = rows.reduce((sum,r)=>sum+getCount(r),0);
+    status.textContent = (horario === 'Todos' ? 'Todos los horarios' : 'Filtro: ' + document.querySelector('#horario option:checked').textContent) + ' · ' + total + ' respuestas válidas · actualizado ' + new Date().toLocaleTimeString();
   } catch (e) {
-    status.textContent = 'No se pudieron cargar los datos: ' + e.message + '. Revisa conexión y permisos del endpoint.';
+    status.textContent = 'No se pudieron cargar los datos: ' + e.message + '. Revisa el código y permisos del endpoint Apps Script.';
     console.error(e);
+  } finally {
+    refreshInProgress = false;
   }
 }
-refresh();
+document.getElementById('horario').addEventListener('change', refresh);
 setInterval(refresh, 15000);
+refresh();
 </script>
 </body>
 </html>
