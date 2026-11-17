@@ -8,33 +8,40 @@
 <style>
   :root { color-scheme: light; --ink:#17202a; --muted:#596579; --panel:#ffffff; }
   * { box-sizing: border-box; }
-  body { margin:0; font-family: system-ui,-apple-system,Segoe UI,Roboto,sans-serif; color:var(--ink); background:#f2f5f8; }
-  header { padding:16px 18px 12px; background:#fff; border-bottom:1px solid #dbe2ea; }
+  body { margin:0; font-family: system-ui,-apple-system,Segoe UI,Roboto,sans-serif; color:var(--ink); background:linear-gradient(180deg,#dcebf6 0%,#eaf2f9 60%,#e4eef6 100%); min-height:100vh; }
+  header { padding:18px 18px 14px; background:linear-gradient(135deg,#0b3552 0%,#14597f 100%); border-bottom:4px solid #2bb3c0; color:#fff; box-shadow:0 2px 10px rgba(11,53,82,.25); }
   h1 { font-size:clamp(1.15rem,2.8vw,1.7rem); margin:0 0 5px; }
-  .sub { color:var(--muted); font-size:.92rem; }
+  .sub { color:#cfe6f2; font-size:.92rem; }
   .layout { display:grid; grid-template-columns:minmax(0,1fr) 300px; gap:12px; padding:12px; }
-  #map { height:calc(100vh - 150px); min-height:470px; border-radius:12px; border:1px solid #d5dde6; overflow:hidden; }
-  aside { background:var(--panel); border:1px solid #dbe2ea; border-radius:12px; padding:14px; align-self:start; }
+  #map { height:calc(100vh - 150px); min-height:470px; border-radius:12px; border:2px solid #fff; box-shadow:0 4px 14px rgba(11,53,82,.18); overflow:hidden; }
+  aside { background:var(--panel); border:1px solid #c5d8e6; border-top:4px solid #2bb3c0; border-radius:12px; padding:14px; align-self:start; box-shadow:0 4px 14px rgba(11,53,82,.10); }
   aside h2 { font-size:1rem; margin:0 0 10px; }
   .legend { display:grid; gap:7px; margin-bottom:14px; font-size:.9rem; }
   .gradient { height:13px; border-radius:999px; margin:8px 0 4px; background:linear-gradient(90deg,#c5ccd5 0%,#45c95e 25%,#e8f000 50%,#ff8c00 75%,#f00018 100%); border:1px solid #cbd2da; }
   .gradient-labels { display:flex; justify-content:space-between; color:var(--muted); font-size:.72rem; margin-bottom:14px; }
   .stats { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:12px 0 16px; }
-  .stat { border:1px solid #e0e6ed; border-radius:9px; padding:9px; background:#fbfcfd; }
+  .stat { border:1px solid #cfe0ec; border-radius:9px; padding:9px; background:#f1f8fc; }
   .stat strong { display:block; font-size:1.15rem; }
   .stat span { font-size:.75rem; color:var(--muted); }
+  .stat:last-child { grid-column:1 / -1; }
   .filters { display:grid; gap:6px; margin:10px 0 14px; }
   .filters label { font-size:.83rem; font-weight:600; }
   select { width:100%; border:1px solid #ccd5df; border-radius:8px; padding:9px; background:#fff; font:inherit; }
   .notice { font-size:.78rem; color:var(--muted); line-height:1.4; margin:8px 0; }
   .leaflet-tooltip.sector-label { background:rgba(255,255,255,.9); border:1px solid #7c8795; border-radius:5px; box-shadow:none; font-weight:700; font-size:11px; padding:2px 5px; }
   .dot { display:inline-block; width:12px; height:12px; border-radius:50%; margin-right:7px; vertical-align:-1px; border:1px solid #9aa5b1; }
-  #status { font-size:.85rem; color:var(--muted); padding:9px 10px; border-radius:8px; background:#f4f7fa; margin-bottom:12px; }
+  #status { font-size:.85rem; color:#27506b; padding:9px 10px; border-radius:8px; background:#e6f2f8; margin-bottom:12px; }
   #list { display:grid; gap:7px; }
   .sector { display:grid; grid-template-columns:12px 1fr auto; align-items:center; gap:8px; border-bottom:1px solid #edf0f4; padding:6px 0; font-size:.88rem; }
   .sector .level { color:var(--muted); text-align:right; font-size:.8rem; }
   .small { color:var(--muted); font-size:.8rem; line-height:1.45; margin-top:13px; }
   .leaflet-popup-content { line-height:1.55; }
+  .left { display:flex; flex-direction:column; gap:12px; min-width:0; }
+  .survey { margin:0; padding:18px 20px; border-radius:12px; background:linear-gradient(135deg,#0b3552 0%,#14597f 100%); border-bottom:4px solid #2bb3c0; color:#fff; display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px 20px; box-shadow:0 4px 14px rgba(11,53,82,.18); }
+  .survey h2 { margin:0 0 3px; font-size:1.1rem; }
+  .survey p { margin:0; color:#cfe6f2; font-size:.9rem; }
+  .survey a { display:inline-block; background:#2bb3c0; color:#06283d; font-weight:700; text-decoration:none; padding:11px 20px; border-radius:999px; transition:background .15s, transform .15s; }
+  .survey a:hover { background:#52cfda; transform:translateY(-1px); }
   @media (max-width:850px) { .layout { grid-template-columns:1fr; } #map { height:65vh; min-height:400px; } aside { order:2; } }
 </style>
 </head>
@@ -44,7 +51,16 @@
   <div class="sub">Mapa de percepción de ruido por sector · actualización automática cada 15 segundos.</div>
 </header>
 <div class="layout">
-  <div id="map" aria-label="Mapa interactivo de sectores"></div>
+  <div class="left">
+    <div id="map" aria-label="Mapa interactivo de sectores"></div>
+    <section class="survey">
+      <div>
+        <h2>Participa en nuestra encuesta para mejorar el mapa</h2>
+        <p>Tu respuesta ayuda a que el mapa de ruido del campus sea más preciso.</p>
+      </div>
+      <a href="https://docs.google.com/forms/d/e/1FAIpQLSemwcZJDUynbmOt9kb5oI6gkGPAEovu3qlpp6UEayGM77eGAw/viewform?usp=header" target="_blank" rel="noopener">Responder la encuesta →</a>
+    </section>
+  </div>
   <aside>
     <h2>Nivel reportado</h2>
     <div class="gradient" title="Escala gradual de color"></div>
@@ -61,7 +77,6 @@
       <div class="notice">Elige un horario para recalcular los promedios y colores con las respuestas de esa franja.</div>
     </div>
     <div class="stats">
-      <div class="stat"><strong id="totalResponses">—</strong><span>Respuestas válidas</span></div>
       <div class="stat"><strong id="overallAvg">—</strong><span>Promedio general</span></div>
       <div class="stat"><strong id="noisySector">—</strong><span>Mayor promedio</span></div>
       <div class="stat"><strong id="sectorsWithData">—</strong><span>Sectores con datos</span></div>
@@ -87,8 +102,8 @@ function scoreColor(avg, count) {
   // La intensidad depende explícitamente del tamaño de muestra:
   // 1–4 respuestas = tenue; 5–19 = intermedia; 20+ = color pleno.
   let confidence;
-  if (count < 5) confidence = 0.24 + 0.04 * (count - 1); // 1: 24%, 4: 36%
-  else if (count < 20) confidence = 0.45 + 0.035 * (count - 5); // 5: 45%, 19: 94%
+  if (count < 5) confidence = 0.55 + 0.05 * (count - 1); // 1: 55%, 4: 70%
+  else if (count < 20) confidence = 0.75 + 0.0175 * (count - 5); // 5: 75%, 19: 100%
   else confidence = 1;
   return rgb(mix(noDataRGB, tone, confidence));
 }
@@ -144,10 +159,10 @@ function renderSummary(rows) {
     const d = byName[s.name] || {};
     const layer = layers[s.name];
     const avg = getAvg(d), count = getCount(d);
-    let fillOpacity = 0.42;
-    if (count > 0 && count < 5) fillOpacity = 0.38;
-    else if (count >= 5 && count < 20) fillOpacity = 0.50 + 0.22 * ((count - 5) / 15);
-    else if (count >= 20) fillOpacity = 0.82;
+    let fillOpacity = 0.55;
+    if (count > 0 && count < 5) fillOpacity = 0.60;
+    else if (count >= 5 && count < 20) fillOpacity = 0.70 + 0.16 * ((count - 5) / 15);
+    else if (count >= 20) fillOpacity = 0.88;
     layer.setStyle({ fillColor: scoreColor(avg, count), fillOpacity, color:'#ffffff', weight:2 });
     layer.setPopupContent(popupHtml(s.name, d));
   });
@@ -167,7 +182,6 @@ function renderSummary(rows) {
   const total = validRows.reduce((sum,r)=>sum+getCount(r),0);
   const avgAll = total ? validRows.reduce((sum,r)=>sum+getAvg(r)*getCount(r),0)/total : NaN;
   const max = validRows.slice().sort((a,b)=>getAvg(b)-getAvg(a))[0];
-  document.getElementById('totalResponses').textContent = String(total);
   document.getElementById('overallAvg').textContent = Number.isFinite(avgAll) ? avgAll.toFixed(2)+'/5' : '—';
   document.getElementById('noisySector').textContent = max ? max['Sector'] : '—';
   document.getElementById('sectorsWithData').textContent = `${validRows.length}/11`;
