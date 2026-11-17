@@ -83,7 +83,7 @@
     </div>
     <div id="status">Cargando datos del resumen…</div>
     <div id="list"></div>
-    <p class="small">El color combina el promedio de ruido percibido (tono) y la cantidad de respuestas (intensidad). Los resultados con pocas respuestas se muestran atenuados. Es percepción declarada, no una medición en decibelios.</p>
+    <p class="small">El color combina el promedio de ruido percibido (tono) y la cantidad de respuestas (intensidad). Los resultados con pocas respuestas se muestran atenuados. La escala de color está ajustada al rango de respuestas obtenido para distinguir mejor los sectores. Es percepción declarada, no una medición en decibelios.</p>
   </aside>
 </div>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -91,14 +91,32 @@
 const sectors = [{"name": "Sector 1", "coords": [[-16.40594741464837, -71.52454357734723], [-16.40643903532019, -71.52511795918727], [-16.4069659909877, -71.52462814071792], [-16.40673688824033, -71.52386885509009], [-16.40594741464837, -71.52454357734723]]}, {"name": "Sector 2", "coords": [[-16.40382398204928, -71.52591474208336], [-16.40348659616114, -71.52622808957109], [-16.40368271148853, -71.52645714632217], [-16.40383475207471, -71.52665442293802], [-16.40442715867136, -71.52610239005867], [-16.40409757106154, -71.52565899552991], [-16.40382398204928, -71.52591474208336]]}, {"name": "Sector 3", "coords": [[-16.40412379896531, -71.5243714169698], [-16.40374056712134, -71.52385529756776], [-16.40314370017662, -71.52436990524019], [-16.40318942597364, -71.52530625708889], [-16.40337608695615, -71.5253091033246], [-16.40364620192014, -71.52486122566826], [-16.40412379896531, -71.5243714169698]]}, {"name": "Sector 4", "coords": [[-16.40435671200764, -71.5272874288314], [-16.40490250804606, -71.52670515511959], [-16.40442756014734, -71.5261194490036], [-16.40384381918185, -71.52668362237725], [-16.40435671200764, -71.5272874288314]]}, {"name": "Sector 5", "coords": [[-16.40443828023654, -71.52487655994008], [-16.40414557168516, -71.5245155562186], [-16.40355168140333, -71.5250794807201], [-16.40381118239431, -71.52545596651255], [-16.40443828023654, -71.52487655994008]]}, {"name": "Sector 6", "coords": [[-16.40568745499479, -71.52234234967797], [-16.40515758622741, -71.52278294686008], [-16.40469880660299, -71.52341656078778], [-16.40524041775957, -71.52407531601546], [-16.40625912271318, -71.52315578833341], [-16.40568745499479, -71.52234234967797]]}, {"name": "Sector 7", "coords": [[-16.40419571966746, -71.52453098226333], [-16.40444648306689, -71.5248385200082], [-16.40484039919566, -71.52448032389458], [-16.40456204998949, -71.52419036699351], [-16.40419571966746, -71.52453098226333]]}, {"name": "Sector 8", "coords": [[-16.40571220280075, -71.52463869563397], [-16.40642446557276, -71.52396474728938], [-16.4060100952958, -71.52346224150878], [-16.40532161529597, -71.52410696492744], [-16.40571220280075, -71.52463869563397]]}, {"name": "Sector 9", "coords": [[-16.40241620189173, -71.5249387858715], [-16.40363022170559, -71.52386976184441], [-16.40328361470142, -71.52341113863045], [-16.40202874177385, -71.52448289887019], [-16.40241620189173, -71.5249387858715]]}, {"name": "Sector 10", "coords": [[-16.40418721656236, -71.52393234100857], [-16.40478898325819, -71.52296540575415], [-16.40515528681442, -71.52251923622671], [-16.40561822922728, -71.52218774502995], [-16.40529750301027, -71.52167341313506], [-16.40362494177661, -71.52324654003168], [-16.40418721656236, -71.52393234100857]]}, {"name": "Sector 11", "coords": [[-16.40519989422836, -71.52552474888752], [-16.4050351160697, -71.52527826968921], [-16.40434087422901, -71.5258694200502], [-16.40453021817076, -71.52611289767385], [-16.40519989422836, -71.52552474888752]]}];
 const endpoint = "https://script.google.com/macros/s/AKfycbxCu0SE8jE7TkAScvWFuQq6i8jVFKiOS2Q9NUcqoo74tBbfGlVkZSEz4O_7-vSsGtmR/exec";
 const colorMap = { "SIN_COLOR": "#d7dde4" };
-const lowRGB = [0,190,55], midRGB = [255,235,0], highRGB = [245,0,20], noDataRGB = [195,203,213];
+const lowRGB = [0,190,55], midRGB = [255,235,0], orangeRGB = [255,120,0], highRGB = [245,0,20], noDataRGB = [195,203,213];
+// Paradas de la escala (promedio -> color), ajustadas al rango real de respuestas (≈1.8–3.5)
+// para distinguir mejor los sectores: verde → amarillo → naranja → rojo.
+const colorStops = [
+  { v: 1.8, c: lowRGB },
+  { v: 2.6, c: midRGB },
+  { v: 3.2, c: orangeRGB },
+  { v: 3.9, c: highRGB }
+];
+function toneFor(avg) {
+  if (avg <= colorStops[0].v) return colorStops[0].c;
+  for (let i = 1; i < colorStops.length; i++) {
+    if (avg <= colorStops[i].v) {
+      const a = colorStops[i-1], b = colorStops[i];
+      return mix(a.c, b.c, (avg - a.v) / (b.v - a.v));
+    }
+  }
+  return colorStops[colorStops.length - 1].c;
+}
 function mix(a,b,t) { return a.map((v,i)=>Math.round(v+(b[i]-v)*Math.max(0,Math.min(1,t)))); }
 function rgb(rgb) { return "#" + rgb.map(v=>v.toString(16).padStart(2,"0")).join(""); }
 function scoreColor(avg, count) {
   if (!Number.isFinite(avg) || count <= 0) return "#d7dde4";
-  // La escala 1–5 se interpola de verde (1) a amarillo (3) y rojo (5).
+  // Escala de color por tramos: verde → amarillo → naranja → rojo (ver colorStops).
   const raw = Math.max(1, Math.min(5, avg));
-  const tone = raw <= 3 ? mix(lowRGB, midRGB, (raw-1)/2) : mix(midRGB, highRGB, (raw-3)/2);
+  const tone = toneFor(raw);
   // La intensidad depende explícitamente del tamaño de muestra:
   // 1–4 respuestas = tenue; 5–19 = intermedia; 20+ = color pleno.
   let confidence;
